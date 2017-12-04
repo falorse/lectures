@@ -8,33 +8,38 @@
 #define OUT 0
 
 double* readMatrix(const char* path, int* rows_num, int* cols_num);
+double** readMatrix(const char* path, int* rows_num, int* cols_num);
+
 void outputMatrix(const char* path, double* matrix,int rows_num, int cols_num);
-double* mulutipyMatrix(const double* left_mat, const double* right_mat);
+double* mulutipyMatrix(const double* leftM, const double* rightM);
 void distributeRightMat();
 
 int main(int argc, char *argv[]) {
 	int i, j, k;
 	
-	//行列の大きさを表す,Aの行&Cの行、Bの列&Cの列、Aの列&Bの行
+	//matrix sizes ,Aの行&Cの行、Bの列&Cの列、Aの列&Bの行
 	int I, J, K;
 
-	char A_path[MAXLEN];
-	char B_path[MAXLEN];
-	char C_path[MAXLEN];
+	char leftM_path[MAXLEN];
+	char rightM_path[MAXLEN];
+	char ansM_path[MAXLEN];
 
 
 	if (argc == 4) {
-		strcpy(A_path, argv[1]);
-		strcpy(B_path, argv[2]);
-		strcpy(C_path, argv[3]);
+		strcpy(leftM_path, argv[1]);
+		strcpy(rightM_path, argv[2]);
+		strcpy(ansM_path, argv[3]);
 	} else {
-		printf("ERROR USAGE: mul_matrix input_matrix1 input_matrix2 output\n");
+		printf("ERROR USAGE: mul_matrix leftM_path leftM_path ansM_path\n");
 		return 0;
 	}
 	
 	double sum;
 	double *a, *b, *partial_a;
 	double *b2, *c, *partial_c;
+　　
+    double* leftM = readMatrix(leftM_path, &I, &K);
+    double* rightM = readMatrix(rightM_path, &K, &J);
 
 	double start,start2, end,end2;
 
@@ -48,10 +53,10 @@ int main(int argc, char *argv[]) {
 	
 	/*rootプロセスの処理内容*/
 	if (rank == 0) {
-		a = readMatrix(A_path, &I, &K);
+		a = readMatrix(leftM_path, &I, &K);
 		int a_K = K;
 
-		b = readMatrix(B_path, &K, &J);
+		b = readMatrix(rightM_path, &K, &J);
 
 		if(a_K!=K){
 			printf("ERROR A cols_num != B rows_num");
@@ -147,7 +152,7 @@ int main(int argc, char *argv[]) {
 				sum += c[i];
 			}
 		}
-		outputMatrix(C_path, c, I, J);
+		outputMatrix(ansM_path, c, I, J);
 		end=MPI_Wtime();    
 		free(c);
 
@@ -183,6 +188,7 @@ double* readMatrix(const char* path, int* rows_num, int* cols_num) {
 		for (i = 0; i < row; ++i) {
 			for (j = 0; j < col; ++j) {
 				fread(&value, sizeof (double), 1, fp);
+				printf("%d",value);
 				matrix[i * col + j] = value;
 			}
 		}
@@ -191,6 +197,41 @@ double* readMatrix(const char* path, int* rows_num, int* cols_num) {
 
 	return matrix;
 }
+
+double** readMatrix(const char* path, int* rows_num, int* cols_num) {
+	FILE* fp;
+	int row, col;
+	double value;
+	double** matrix;
+
+	int i, j;
+	
+	fp = fopen(path, "rb");
+	if (fp != NULL) {
+		fread(&row, sizeof (int), 1, fp);
+		fread(&col, sizeof (int), 1, fp);
+		// *rows_num = row;
+		// *cols_num = col;
+        double** matrix;
+    	matrix = malloc(sizeof(int *) * col);
+ 
+
+      	for(int i = 0; i < n; i++) {
+		    nums1[i] = malloc(sizeof(int) * row);
+	    }
+	    
+		for (i = 0; i < row; ++i) {
+			for (j = 0; j < col; ++j) {
+				fread(&value, sizeof (double), 1, fp);
+				matrix[i][j] = value;
+			}
+		}
+	}
+	fclose(fp);
+
+	return matrix;
+}
+
 
 void outputMatrix(const char* path, double* matrix, int rows_num, int cols_num) {
 	FILE* fp;
