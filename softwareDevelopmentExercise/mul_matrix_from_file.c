@@ -14,7 +14,7 @@ double* read_mat_file(const char* path, int* rows_num, int* cols_num);
 
 void write_mat_file(const char* path, double* matrix, int rows_num, int cols_num);
 double* mulutipy_mat(const double* leftMat, const double* rightMat);
-double* transpose_mat(const double* originalMat, int original_rows, int original_cols);
+//double* transpose_mat(const double* originalMat, int original_rows, int original_cols);
 void broadcastMatSize(int* A_rows_num,int* B_cols_num,int* A_cols_num,int* alloc_C_elems_num,int* alloc_A_rows_num,int* alloc_A_elems_num, MPI_Comm comm);
 void broadcastMat(double* partialA, double* partialC, double* transposedB, MPI_Comm comm);
 int main2(int argc, char* argv[]);
@@ -57,10 +57,10 @@ int main(int argc, char *argv[]) {
     if (rank == 0) {
         A = read_mat_file(A_path, &A_rows_num, &A_cols_num);
         B = read_mat_file(B_path, &A_cols_num, &B_cols_num);
-        
-        transposedB = (double *) malloc(B_cols_num * A_cols_num * sizeof (double));
-        transposedB = transpose_mat(B, A_cols_num, B_cols_num);
-
+        show_mat(B);
+//        transposedB = (double *) malloc(B_cols_num * A_cols_num * sizeof (double));
+        transposedB = transepose_mat(B);
+        show_mat(transposedB);
         if (A == NULL || B == NULL) {
             printf("ERROR filepath is wrong");
         }
@@ -132,8 +132,8 @@ int main(int argc, char *argv[]) {
     if (rank == 0) {
 
         end2 = MPI_Wtime();
-        showMat(C, B_cols_num, A_rows_num);
 
+        show_mat(C);
         write_mat_file(C_path, C, A_rows_num, B_cols_num);
         end = MPI_Wtime();
         free(C);
@@ -150,6 +150,49 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+//double* read_mat_file(const char* path, int* rows_num, int* cols_num) {
+//    FILE* fp;
+//    int row, col;
+//    double value;
+//    double *matrix;
+//    int i, j;
+//
+//#ifdef NO_MAT_FILE
+//    int mat_rows = 2;
+//    matrix = (double *) malloc(mat_rows * mat_rows * sizeof (double));
+//    for (i = 0; i < mat_rows * mat_rows; i++) {
+//        matrix[i] = i;
+//    }
+//    *rows_num = mat_rows;
+//    *cols_num = mat_rows;
+//    return matrix;
+//#else
+//
+//    fp = fopen(path, "rb");
+//    if (fp != NULL) {
+//        fread(&row, sizeof (int), 1, fp);
+//        fread(&col, sizeof (int), 1, fp);
+//        printf("%d,%d\n", row, col);
+//        *rows_num = row;
+//        *cols_num = col;
+//
+//        matrix = (double *) malloc(row * col * sizeof (double));
+//
+//        for (i = 0; i < row; ++i) {
+//            for (j = 0; j < col; ++j) {
+//                fread(&value, sizeof (double), 1, fp);
+//                matrix[i * col + j] = value;
+//            }
+//        }
+//    } else {
+//        return NULL;
+//    }
+//    fclose(fp);
+//
+//    return matrix;
+//#endif
+//}
 
 double* read_mat_file(const char* path, int* rows_num, int* cols_num) {
     FILE* fp;
@@ -194,6 +237,7 @@ double* read_mat_file(const char* path, int* rows_num, int* cols_num) {
 #endif
 }
 
+
 void write_mat_file(const char* path, double* matrix, int rows_num, int cols_num) {
     FILE* fp;
     int i, j;
@@ -214,28 +258,19 @@ void write_mat_file(const char* path, double* matrix, int rows_num, int cols_num
     fclose(fp);
 }
 
-double* transpose_mat(const double* originalMat, int original_rows, int original_cols) {
-    double* transposedMat = (double *) malloc(original_rows * original_cols * sizeof (double));
+//double* transpose_mat(const double* originalMat, int original_rows, int original_cols) {
+//    double* transposedMat = (double *) malloc(original_rows * original_cols * sizeof (double));
+//
+//    int i,j;
+//    for (i = 0; i < original_rows; i++) {
+//        for (j = 0; j < original_cols; j++) {
+//            transposedMat[i * original_rows + j] = originalMat[j * original_cols + i];
+//        }
+//    }
+//    
+//    return transposedMat;
+//}
 
-    int i,j;
-    for (i = 0; i < original_rows; i++) {
-        for (j = 0; j < original_cols; j++) {
-            transposedMat[i * original_rows + j] = originalMat[j * original_cols + i];
-        }
-    }
-    
-    return transposedMat;
-}
-
-void showMat(const double* mat, int rows, int cols){
-    int i, j;
-    for(i = 0; i < rows;i++){
-        for(j= 0 ; j < cols ; j++){
-            printf("%f ", mat[i * rows + j]);
-        }
-        printf("\n");
-    }
-}
 
 void broadcastMatSize(int* A_rows_num,int* B_cols_num,int* A_cols_num,int* alloc_C_elems_num,int* alloc_A_rows_num,int* alloc_A_elems_num, MPI_Comm comm){
     MPI_Bcast(A_rows_num, 1, MPI_INT, 0, comm);

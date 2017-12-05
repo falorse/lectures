@@ -7,6 +7,7 @@ CFLAGS = -fopenmp -O3
 CXXFLAGS = -Wall -g -fopenmp
 
 OBJS = mul_matrix_from_file.o matrix.o 
+MAT_TEST_OBJS = mat_test.o matrix.o
 
 .SUFFIXES: .o .c .cpp .cxx
 
@@ -25,9 +26,10 @@ OBJS = mul_matrix_from_file.o matrix.o
 all: mul_matrix
 #all: mul_matrix_from_file
 
-
 clean:
 	$(RM) *.o
+
+test_matrix: test_matrix
 
 mul_matrix_from_file: mul_matrix_from_file.c
 #	$(CC) $(CFLAGS) -o $@ $^ $(BLASLIB)
@@ -38,3 +40,6 @@ multiply_matrix: multiply_matrix.cpp
 	
 mul_matrix: $(OBJS)
 	$(MPICC) $(CFLAGS) -o mul_matrix $(OBJS)
+	
+test_matrix: $(MAT_TEST_OBJS)
+	$(CC) -o test_matrix $(MAT_TEST_OBJS)

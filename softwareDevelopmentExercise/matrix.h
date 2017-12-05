@@ -2,21 +2,22 @@
 #define MATRIX_H
 
 struct Matrix{
-    int rows_;
-    int cols_;
-    double* bufs_;
+    int rows;
+    int cols;
+    double* bufs;
 };
 
-struct Matrix* create_matrix(int rows, int cols);
+struct Matrix* create_mat(int rows, int cols);
 
-void destroy_matrix(struct Matrix* mat);
+void destroy_mat(struct Matrix* mat);
 
-void set_value(int row, int cols, double value);
+void set_mat_value(struct Matrix*, int row, int cols, double value);
 
-double get_value(int row, int cols);
+double get_mat_value(struct Matrix* mat, int row, int cols);
 
-struct Matrix* transepose();
+void show_mat(struct Matrix* mat);
 
-double* get_bufs();
+struct Matrix* transepose_mat();
+
 #endif /* MATRIX_H */
 
