@@ -1,0 +1,75 @@
+mpicc -fopenmp -O3  -o multiply_matrix mul_matrix_from_file.c
+mul_matrix_from_file.c:11:10: error: conflicting types for ‘readMatrix’
+ double** readMatrix(const char* path, int* rows_num, int* cols_num);
+          ^
+mul_matrix_from_file.c:10:9: note: previous declaration of ‘readMatrix’ was here
+ double* readMatrix(const char* path, int* rows_num, int* cols_num);
+         ^
+mul_matrix_from_file.c: In function ‘main’:
+mul_matrix_from_file.c:29:3: warning: incompatible implicit declaration of built-in function ‘strcpy’ [enabled by default]
+   strcpy(leftM_path, argv[1]);
+   ^
+mul_matrix_from_file.c:40:1: error: stray ‘\343’ in program
+ 　　
+ ^
+mul_matrix_from_file.c:40:1: error: stray ‘\200’ in program
+mul_matrix_from_file.c:40:1: error: stray ‘\200’ in program
+mul_matrix_from_file.c:40:1: error: stray ‘\343’ in program
+mul_matrix_from_file.c:40:1: error: stray ‘\200’ in program
+mul_matrix_from_file.c:40:1: error: stray ‘\200’ in program
+mul_matrix_from_file.c:41:21: warning: initialization from incompatible pointer type [enabled by default]
+     double* leftM = readMatrix(leftM_path, &I, &K);
+                     ^
+mul_matrix_from_file.c:42:22: warning: initialization from incompatible pointer type [enabled by default]
+     double* rightM = readMatrix(rightM_path, &K, &J);
+                      ^
+mul_matrix_from_file.c:56:5: warning: assignment from incompatible pointer type [enabled by default]
+   a = readMatrix(leftM_path, &I, &K);
+     ^
+mul_matrix_from_file.c:59:5: warning: assignment from incompatible pointer type [enabled by default]
+   b = readMatrix(rightM_path, &K, &J);
+     ^
+mul_matrix_from_file.c: In function ‘readMatrix’:
+mul_matrix_from_file.c:191:5: warning: format ‘%d’ expects argument of type ‘int’, but argument 2 has type ‘double’ [-Wformat=]
+     printf("%d",value);
+     ^
+mul_matrix_from_file.c: At top level:
+mul_matrix_from_file.c:201:10: error: conflicting types for ‘readMatrix’
+ double** readMatrix(const char* path, int* rows_num, int* cols_num) {
+          ^
+mul_matrix_from_file.c:171:9: note: previous definition of ‘readMatrix’ was here
+ double* readMatrix(const char* path, int* rows_num, int* cols_num) {
+         ^
+mul_matrix_from_file.c: In function ‘readMatrix’:
+mul_matrix_from_file.c:219:8: error: ‘for’ loop initial declarations are only allowed in C99 mode
+        for(int i = 0; i < n; i++) {
+        ^
+mul_matrix_from_file.c:219:8: note: use option -std=c99 or -std=gnu99 to compile your code
+mul_matrix_from_file.c:219:27: error: ‘n’ undeclared (first use in this function)
+        for(int i = 0; i < n; i++) {
+                           ^
+mul_matrix_from_file.c:219:27: note: each undeclared identifier is reported only once for each function it appears in
+mul_matrix_from_file.c:220:7: error: ‘nums1’ undeclared (first use in this function)
+       nums1[i] = malloc(sizeof(int) * row);
+       ^
+mul_matrix_from_file.c: In function ‘readMatrix’:
+mul_matrix_from_file.c:181:8: warning: ignoring return value of ‘fread’, declared with attribute warn_unused_result [-Wunused-result]
+   fread(&row, sizeof (int), 1, fp);
+        ^
+mul_matrix_from_file.c:182:8: warning: ignoring return value of ‘fread’, declared with attribute warn_unused_result [-Wunused-result]
+   fread(&col, sizeof (int), 1, fp);
+        ^
+mul_matrix_from_file.c:190:10: warning: ignoring return value of ‘fread’, declared with attribute warn_unused_result [-Wunused-result]
+     fread(&value, sizeof (double), 1, fp);
+          ^
+mul_matrix_from_file.c: In function ‘readMatrix’:
+mul_matrix_from_file.c:211:8: warning: ignoring return value of ‘fread’, declared with attribute warn_unused_result [-Wunused-result]
+   fread(&row, sizeof (int), 1, fp);
+        ^
+mul_matrix_from_file.c:212:8: warning: ignoring return value of ‘fread’, declared with attribute warn_unused_result [-Wunused-result]
+   fread(&col, sizeof (int), 1, fp);
+        ^
+mul_matrix_from_file.c:225:10: warning: ignoring return value of ‘fread’, declared with attribute warn_unused_result [-Wunused-result]
+     fread(&value, sizeof (double), 1, fp);
+          ^
+make: *** [mul_matrix_from_file] エラー 1
