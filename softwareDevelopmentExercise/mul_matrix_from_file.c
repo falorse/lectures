@@ -1,35 +1,31 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <mpi.h>
+#include </usr/lib/openmpi/include/mpi.h>
 #include <omp.h>
+#include "matrix.h"
 
 #define MAXLEN 1024
 #define OUT 0
+//#define NO_MAT_FILE
 
-double* readMatFile(const char* path, int* rows_num, int* cols_num);
+double* read_mat_file(const char* path, int* rows_num, int* cols_num);
 //double** readMatrix(const char* path, int* rows_num, int* cols_num);
 
-void writeMat(const char* path, double* matrix,int rows_num, int cols_num);
-double* mulutipyMat(const double* leftMat, const double* rightMat);
-double* transposeMat(const double* originalMat);
-void distributeRightMat();
-
+void write_mat_file(const char* path, double* matrix, int rows_num, int cols_num);
+double* mulutipy_mat(const double* leftMat, const double* rightMat);
+double* transpose_mat(const double* originalMat, int original_rows, int original_cols);
+void broadcastMatSize(int* A_rows_num,int* B_cols_num,int* A_cols_num,int* alloc_C_elems_num,int* alloc_A_rows_num,int* alloc_A_elems_num, MPI_Comm comm);
+void broadcastMat(double* partialA, double* partialC, double* transposedB, MPI_Comm comm);
 int main2(int argc, char* argv[]);
 
-int main(int argc, char *argv[]) {
-    
-    // 行列A,Bに対して、A * B = C の計算を行い、Cをファイルに出力する
-    int i, j, k;
-	
-    // matrix sizes ,Aの行&Cの行、Bの列&Cの列、Aの列&Bの行
-    int A_rows, B_cols, A_cols;
 
+int main(int argc, char *argv[]) {
+
+    // 引数チェックとファイルパスの取得
     char A_path[MAXLEN];
     char B_path[MAXLEN];
     char C_path[MAXLEN];
-
-
     if (argc == 4) {
         strcpy(A_path, argv[1]);
         strcpy(B_path, argv[2]);
@@ -39,9 +35,14 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    int i, j, k;
+
+    // matrix sizes ,Aの行&Cの行、Bの列&Cの列、Aの列&Bの行
+    int A_rows_num, B_cols_num, A_cols_num;
+
     double *A, *B, *partialA;
     double *transposedB, *C, *partialC;
-    
+
     double start, start2, end, end2;
 
     /* MPI Initialize */
@@ -54,68 +55,53 @@ int main(int argc, char *argv[]) {
 
     /*rootプロセスの処理内容*/
     if (rank == 0) {
-        // MatFileの読み込みと行列の行数が正しいかどうか確認
-        A = readMatFile(A_path, &A_rows, &A_cols);
-        int tmp = A_cols;
-
-        B = readMatFile(B_path, &A_cols, &B_cols);
-        transposedB = transposeMat(B);
+        A = read_mat_file(A_path, &A_rows_num, &A_cols_num);
+        B = read_mat_file(B_path, &A_cols_num, &B_cols_num);
         
-        if (tmp != A_cols) {
-            printf("ERROR A cols_num != B rows_num");
-            return 0;
+        transposedB = (double *) malloc(B_cols_num * A_cols_num * sizeof (double));
+        transposedB = transpose_mat(B, A_cols_num, B_cols_num);
+
+        if (A == NULL || B == NULL) {
+            printf("ERROR filepath is wrong");
         }
+        free(B);
 
-        alloc_C_elems_num = A_rows * B_cols / num_procs;
-        alloc_A_elems_num = A_rows * A_cols / num_procs;
-        alloc_A_rows_num = A_rows / num_procs;
+        alloc_C_elems_num = A_rows_num * B_cols_num / num_procs;
+        alloc_A_elems_num = A_rows_num * A_cols_num / num_procs;
+        alloc_A_rows_num = A_rows_num / num_procs;
     }
-
-    MPI_Bcast(&A_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&B_cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&A_cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&alloc_C_elems_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&alloc_A_rows_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&alloc_A_elems_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    
+    broadcastMatSize(&A_rows_num, &B_cols_num, &A_cols_num, &alloc_C_elems_num, 
+            &alloc_A_rows_num, &alloc_A_elems_num, MPI_COMM_WORLD);
 
     partialA = (double *) malloc(alloc_A_elems_num * sizeof (double));
     partialC = (double *) malloc(alloc_C_elems_num * sizeof (double));
 
-    transposedB = (double *) malloc(B_cols * A_cols * sizeof (double));
-
-    if (rank == 0) {
-        C = (double *) malloc(A_rows * B_cols * sizeof (double));
-        transposedB = (double *) malloc(B_cols * A_cols * sizeof (double));
-
-        //bを転置してb2に格納
-        for (k = 0; k < A_cols; k++) {
-            for (j = 0; j < B_cols; j++) {
-                transposedB[k * B_cols + j] = B[j * A_cols + k];
-            }
-        }
-
-        //データを送信
-        for (i = 1; i < num_procs; i++) {
-            int a_first = i*alloc_A_elems_num;
-            for (k = 0; k < alloc_A_elems_num; k++) {
-                partialA[k] = A[a_first + k];
-            }
-            MPI_Send(partialA, alloc_C_elems_num, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
-        }
-
-        for (i = 0; i < alloc_A_elems_num; i++) {
-            partialA[i] = A[i];
-        }
-
-        free(A);
-        free(B);
-        printf("calc start\n");
-    } else {
-        MPI_Status status;
-        MPI_Recv(partialA, alloc_A_elems_num, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
-    }
-
-    MPI_Bcast(transposedB, B_cols * A_cols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//    broadcastMat(partialA, partialA, transposedB, MPI_COMM_WORLD);
+//    if (rank == 0) {
+//        C = (double *) malloc(A_rows_num * B_cols_num * sizeof (double));
+//
+//        //データを送信
+//        for (i = 1; i < num_procs; i++) {
+//            int a_first = i * alloc_A_elems_num;
+//            for (k = 0; k < alloc_A_elems_num; k++) {
+//                partialA[k] = A[a_first + k];
+//            }
+//            MPI_Send(partialA, alloc_C_elems_num, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+//        }
+//
+//        for (i = 0; i < alloc_A_elems_num; i++) {
+//            partialA[i] = A[i];
+//        }
+//
+//        free(A);
+//        printf("calc start\n");
+//    } else {
+//        MPI_Status status;
+//        MPI_Recv(partialA, alloc_A_elems_num, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
+//    }
+//
+//    MPI_Bcast(transposedB, B_cols_num * A_cols_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     /*各プロセスの処理内容*/
     double temp;
@@ -123,39 +109,40 @@ int main(int argc, char *argv[]) {
 
     // 計算部分 tempをレジスタに置くこととアンローリングで高速化
 #pragma omp parallel for private(i,k,temp)
-    for (j = 0; j < B_cols; j += 8) {
+    for (j = 0; j < B_cols_num; j += 8) {
         for (i = 0; i < alloc_A_rows_num; i++) {
-            for (k = 0; k < A_cols; k++) {
-                temp = partialA[i * A_cols + k];
-                partialC[i * B_cols + j] += temp * transposedB[j * A_cols + k];
-                partialC[i * B_cols + j + 1] += temp * transposedB[(j + 1) * A_cols + k];
-                partialC[i * B_cols + j + 2] += temp * transposedB[(j + 2) * A_cols + k];
-                partialC[i * B_cols + j + 3] += temp * transposedB[(j + 3) * A_cols + k];
-                partialC[i * B_cols + j + 4] += temp * transposedB[(j + 4) * A_cols + k];
-                partialC[i * B_cols + j + 5] += temp * transposedB[(j + 5) * A_cols + k];
-                partialC[i * B_cols + j + 6] += temp * transposedB[(j + 6) * A_cols + k];
-                partialC[i * B_cols + j + 7] += temp * transposedB[(j + 7) * A_cols + k];
+            for (k = 0; k < A_cols_num; k++) {
+                temp = partialA[i * A_cols_num + k];
+                partialC[i * B_cols_num + j] += temp * transposedB[j * A_cols_num + k];
+                partialC[i * B_cols_num + j + 1] += temp * transposedB[(j + 1) * A_cols_num + k];
+                partialC[i * B_cols_num + j + 2] += temp * transposedB[(j + 2) * A_cols_num + k];
+                partialC[i * B_cols_num + j + 3] += temp * transposedB[(j + 3) * A_cols_num + k];
+                partialC[i * B_cols_num + j + 4] += temp * transposedB[(j + 4) * A_cols_num + k];
+                partialC[i * B_cols_num + j + 5] += temp * transposedB[(j + 5) * A_cols_num + k];
+                partialC[i * B_cols_num + j + 6] += temp * transposedB[(j + 6) * A_cols_num + k];
+                partialC[i * B_cols_num + j + 7] += temp * transposedB[(j + 7) * A_cols_num + k];
             }
         }
     }
 
     MPI_Gather(partialC, alloc_C_elems_num, MPI_DOUBLE, C, alloc_C_elems_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
     /*各プロセスの処理内容終わり*/
 
     //rootに戻って出力
     if (rank == 0) {
 
         end2 = MPI_Wtime();
+        showMat(C, B_cols_num, A_rows_num);
 
-        writeMat(C_path, C, A_rows, B_cols);
+        write_mat_file(C_path, C, A_rows_num, B_cols_num);
         end = MPI_Wtime();
         free(C);
 
-        printf("N:%d, all_time:%f,calc_time:%f,processes:%d(alloc_c_num:%d).threads:%d\n", A_rows*B_cols, (end - start), (end2 - start2), num_procs, alloc_C_elems_num, omp_get_max_threads());
+        printf("N:%d, all_time:%f,calc_time:%f,processes:%d(alloc_c_num:%d).threads:%d\n", A_rows_num * B_cols_num, (end - start), (end2 - start2), num_procs, alloc_C_elems_num, omp_get_max_threads());
     }
 
     //終了処理
+    printf("finalize");
     free(partialA);
     free(transposedB);
     free(partialC);
@@ -164,18 +151,29 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-double* readMatFile(const char* path, int* rows_num, int* cols_num) {
+double* read_mat_file(const char* path, int* rows_num, int* cols_num) {
     FILE* fp;
     int row, col;
     double value;
     double *matrix;
-
     int i, j;
-    printf("read matrix %s\n", path);
+
+#ifdef NO_MAT_FILE
+    int mat_rows = 2;
+    matrix = (double *) malloc(mat_rows * mat_rows * sizeof (double));
+    for (i = 0; i < mat_rows * mat_rows; i++) {
+        matrix[i] = i;
+    }
+    *rows_num = mat_rows;
+    *cols_num = mat_rows;
+    return matrix;
+#else
+
     fp = fopen(path, "rb");
     if (fp != NULL) {
         fread(&row, sizeof (int), 1, fp);
         fread(&col, sizeof (int), 1, fp);
+        printf("%d,%d\n", row, col);
         *rows_num = row;
         *cols_num = col;
 
@@ -187,13 +185,16 @@ double* readMatFile(const char* path, int* rows_num, int* cols_num) {
                 matrix[i * col + j] = value;
             }
         }
+    } else {
+        return NULL;
     }
     fclose(fp);
 
     return matrix;
+#endif
 }
 
-void writeMat(const char* path, double* matrix, int rows_num, int cols_num) {
+void write_mat_file(const char* path, double* matrix, int rows_num, int cols_num) {
     FILE* fp;
     int i, j;
     double value;
@@ -213,3 +214,61 @@ void writeMat(const char* path, double* matrix, int rows_num, int cols_num) {
     fclose(fp);
 }
 
+double* transpose_mat(const double* originalMat, int original_rows, int original_cols) {
+    double* transposedMat = (double *) malloc(original_rows * original_cols * sizeof (double));
+
+    int i,j;
+    for (i = 0; i < original_rows; i++) {
+        for (j = 0; j < original_cols; j++) {
+            transposedMat[i * original_rows + j] = originalMat[j * original_cols + i];
+        }
+    }
+    
+    return transposedMat;
+}
+
+void showMat(const double* mat, int rows, int cols){
+    int i, j;
+    for(i = 0; i < rows;i++){
+        for(j= 0 ; j < cols ; j++){
+            printf("%f ", mat[i * rows + j]);
+        }
+        printf("\n");
+    }
+}
+
+void broadcastMatSize(int* A_rows_num,int* B_cols_num,int* A_cols_num,int* alloc_C_elems_num,int* alloc_A_rows_num,int* alloc_A_elems_num, MPI_Comm comm){
+    MPI_Bcast(A_rows_num, 1, MPI_INT, 0, comm);
+    MPI_Bcast(B_cols_num, 1, MPI_INT, 0, comm);
+    MPI_Bcast(A_cols_num, 1, MPI_INT, 0, comm);
+    MPI_Bcast(alloc_C_elems_num, 1, MPI_INT, 0, comm);
+    MPI_Bcast(alloc_A_rows_num, 1, MPI_INT, 0, comm);
+    MPI_Bcast(alloc_A_elems_num, 1, MPI_INT, 0, comm);    
+}
+
+//void broadcastMat(double* partialA, double* partialA, double* transposedB, MPI_Comm comm ){
+//        if (rank == 0) {
+//        C = (double *) malloc(A_rows_num * B_cols_num * sizeof (double));
+//
+//        //データを送信
+//        for (i = 1; i < num_procs; i++) {
+//            int a_first = i * alloc_A_elems_num;
+//            for (k = 0; k < alloc_A_elems_num; k++) {
+//                partialA[k] = A[a_first + k];
+//            }
+//            MPI_Send(partialA, alloc_C_elems_num, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+//        }
+//
+//        for (i = 0; i < alloc_A_elems_num; i++) {
+//            partialA[i] = A[i];
+//        }
+//
+//        free(A);
+//        printf("calc start\n");
+//    } else {
+//        MPI_Status status;
+//        MPI_Recv(partialA, alloc_A_elems_num, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
+//    }
+//
+//    MPI_Bcast(transposedB, B_cols_num * A_cols_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+//}
