@@ -13,7 +13,7 @@
 double* mulutipy_mat(const double* leftMat, const double* rightMat);
 void broadcast_mat_sizes(int* A_rows, int* B_cols, int* A_cols_num,
         int* local_C_size, int* local_A_rows, int* local_A_size, MPI_Comm comm);
-void broadcast_mat(double* partialA, double* partialC, double* transposedB, MPI_Comm comm);
+void broadcast_local_A(struct Matrix* A, struct Matrix* local_A, int myid, int procs_num);
 struct Matrix* read_input_file(char* file_path, int myid);
 
 int main(int argc, char *argv[]) {
@@ -61,31 +61,7 @@ int main(int argc, char *argv[]) {
             get_mat_size(A), get_mat_size(B), get_mat_size(transeposed_B),
             get_mat_size(C), get_mat_size(local_A), get_mat_size(local_C), myid);
 
-    if (myid == 0) {
-
-        double value;
-
-        //データを送信
-        for (i = 1; i < procs_num; i++) {
-            int local_A_size = get_mat_size(local_A);
-            int local_A_first_index = i * local_A_size;
-            for (k = 0; k < local_A_size; k++) {
-                value = get_mat_value_by_index(A, local_A_first_index + k);
-                set_mat_value_by_index(local_A, value, k);
-            }
-            MPI_Send(local_A->bufs, local_A_size, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
-        }
-
-        for (i = 0; i < get_mat_size(local_A); i++) {
-            value = get_mat_value_by_index(A, i);
-            set_mat_value_by_index(local_A, value, i);
-        }
-
-    } else {
-        MPI_Recv(local_A->bufs, get_mat_size(local_A), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, 0);
-        //        transeposed_B = create_mat(B->cols, B->rows);
-    }
-    destroy_mat(A);
+    broadcast_local_A(A, local_A, myid, procs_num);
 
     MPI_Bcast(transeposed_B->bufs, get_mat_size(transeposed_B),
             MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -180,4 +156,21 @@ struct Matrix* read_input_file(char* file_path, int myid) {
     fclose(fp);
 
     return mat;
+};
+
+void broadcast_local_A(struct Matrix* A, struct Matrix* local_A, int myid, int procs_num) {
+    int i;
+    if (myid == 0) {
+        for (i = 1; i < procs_num; i++) {
+            int local_A_size = get_mat_size(local_A);
+            int local_A_first_index = i * local_A_size;
+            local_A->bufs = &(A->bufs[local_A_first_index]);
+            MPI_Send(local_A->bufs, local_A_size, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+        }
+
+        local_A->bufs = A->bufs;
+    } else {
+        MPI_Recv(local_A->bufs, get_mat_size(local_A), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, 0);
+    }
+    destroy_mat(A);
 };
