@@ -38,6 +38,8 @@
           <buildCommand>${MAKE} -f Makefile</buildCommand>
           <cleanCommand>${MAKE} -f Makefile clean</cleanCommand>
           <executablePath>multiply_matrix</executablePath>
+          <cTool flags="0">
+          </cTool>
           <ccTool>
             <incDir>
               <pElem>/usr/lib/openmpi/include</pElem>
@@ -50,12 +52,6 @@
           <preBuildCommand></preBuildCommand>
         </preBuild>
       </makefileType>
-      <item path="mat_test.c" ex="false" tool="0" flavor2="0">
-        <cTool flags="0">
-        </cTool>
-      </item>
-      <item path="mat_tester.c" ex="false" tool="0" flavor2="2">
-      </item>
       <item path="matrix.c" ex="false" tool="0" flavor2="2">
         <cTool flags="0">
         </cTool>

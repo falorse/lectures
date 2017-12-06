@@ -2,6 +2,9 @@
 <configurationDescriptor version="100">
   <logicalFolder name="root" displayName="root" projectFiles="true" kind="ROOT">
     <df root="." name="0">
+      <df name="matrix_files">
+      </df>
+      <in>mat_test.c</in>
       <in>matrix.c</in>
       <in>matrix.h</in>
       <in>mpi_test.c</in>
@@ -34,8 +37,6 @@
         <gdb_interceptlist>
           <gdbinterceptoptions gdb_all="false" gdb_unhandled="true" gdb_unexpected="true"/>
         </gdb_interceptlist>
-        <gdb_signals>
-        </gdb_signals>
         <gdb_options>
           <DebugOptions>
           </DebugOptions>

@@ -1,7 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include </usr/lib/openmpi/include/mpi.h>
+#include <mpi/mpi.h>
 #include <omp.h>
 #include "matrix.h"
 
@@ -39,69 +39,69 @@ int main(int argc, char *argv[]) {
     // matrix sizes ,Aの行&Cの行、Bの列&Cの列、Aの列&Bの行
     int A_rows_num, B_cols_num, A_cols_num;
 
-    double *A, *B, *partialA;
-    double *transposedB, *C, *partialC;
+    double *A, *B, *loacl_A;
+    double *transposed_B, *C, *local_C;
 
     double start, start2, end, end2;
 
     /* MPI Initialize */
-    int rank, num_procs, alloc_A_elems_num, alloc_A_rows_num, alloc_C_elems_num;
+    int myid, num_procs, local_A_elems_num, local_A_rows_num, local_C_elems_num;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     start = MPI_Wtime();
 
     /*rootプロセスの処理内容*/
     // TODO 次ここからstructを使って書き直す
-    if (rank == 0) {
+    if (myid == 0) {
         A = read_mat_file(A_path, &A_rows_num, &A_cols_num);
         B = read_mat_file(B_path, &A_cols_num, &B_cols_num);
         show_mat(B);
 //        transposedB = (double *) malloc(B_cols_num * A_cols_num * sizeof (double));
-        transposedB = transepose_mat(B);
-        show_mat(transposedB);
+        transposed_B = transepose_mat(B);
+        show_mat(transposed_B);
         if (A == NULL || B == NULL) {
             printf("ERROR filepath is wrong");
         }
         free(B);
 
-        alloc_C_elems_num = A_rows_num * B_cols_num / num_procs;
-        alloc_A_elems_num = A_rows_num * A_cols_num / num_procs;
-        alloc_A_rows_num = A_rows_num / num_procs;
+        local_C_elems_num = A_rows_num * B_cols_num / num_procs;
+        local_A_elems_num = A_rows_num * A_cols_num / num_procs;
+        local_A_rows_num = A_rows_num / num_procs;
     }
     
-    broadcast_mat_size(&A_rows_num, &B_cols_num, &A_cols_num, &alloc_C_elems_num, 
-            &alloc_A_rows_num, &alloc_A_elems_num, MPI_COMM_WORLD);
+    broadcast_mat_size(&A_rows_num, &B_cols_num, &A_cols_num, &local_C_elems_num, 
+            &local_A_rows_num, &local_A_elems_num, MPI_COMM_WORLD);
 
-    partialA = (double *) malloc(alloc_A_elems_num * sizeof (double));
-    partialC = (double *) malloc(alloc_C_elems_num * sizeof (double));
+    loacl_A = (double *) malloc(local_A_elems_num * sizeof (double));
+    local_C = (double *) malloc(local_C_elems_num * sizeof (double));
 
 //    broadcast_mat(partialA, partialA, transposedB, MPI_COMM_WORLD);
-    if (rank == 0) {
+    if (myid == 0) {
         C = (double *) malloc(A_rows_num * B_cols_num * sizeof (double));
 
         //データを送信
         for (i = 1; i < num_procs; i++) {
-            int a_first = i * alloc_A_elems_num;
-            for (k = 0; k < alloc_A_elems_num; k++) {
-                partialA[k] = A[a_first + k];
+            int a_first = i * local_A_elems_num;
+            for (k = 0; k < local_A_elems_num; k++) {
+                loacl_A[k] = A[a_first + k];
             }
-            MPI_Send(partialA, alloc_C_elems_num, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+            MPI_Send(loacl_A, local_C_elems_num, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
         }
 
-        for (i = 0; i < alloc_A_elems_num; i++) {
-            partialA[i] = A[i];
+        for (i = 0; i < local_A_elems_num; i++) {
+            loacl_A[i] = A[i];
         }
 
         free(A);
         printf("calc start\n");
     } else {
         MPI_Status status;
-        MPI_Recv(partialA, alloc_A_elems_num, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(loacl_A, local_A_elems_num, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
     }
 
-    MPI_Bcast(transposedB, B_cols_num * A_cols_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(transposed_B, B_cols_num * A_cols_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     /*各プロセスの処理内容*/
     double temp;
@@ -110,26 +110,26 @@ int main(int argc, char *argv[]) {
     // 計算部分 tempをレジスタに置くこととアンローリングで高速化
 #pragma omp parallel for private(i,k,temp)
     for (j = 0; j < B_cols_num; j += 8) {
-        for (i = 0; i < alloc_A_rows_num; i++) {
+        for (i = 0; i < local_A_rows_num; i++) {
             for (k = 0; k < A_cols_num; k++) {
-                temp = partialA[i * A_cols_num + k];
-                partialC[i * B_cols_num + j] += temp * transposedB[j * A_cols_num + k];
-                partialC[i * B_cols_num + j + 1] += temp * transposedB[(j + 1) * A_cols_num + k];
-                partialC[i * B_cols_num + j + 2] += temp * transposedB[(j + 2) * A_cols_num + k];
-                partialC[i * B_cols_num + j + 3] += temp * transposedB[(j + 3) * A_cols_num + k];
-                partialC[i * B_cols_num + j + 4] += temp * transposedB[(j + 4) * A_cols_num + k];
-                partialC[i * B_cols_num + j + 5] += temp * transposedB[(j + 5) * A_cols_num + k];
-                partialC[i * B_cols_num + j + 6] += temp * transposedB[(j + 6) * A_cols_num + k];
-                partialC[i * B_cols_num + j + 7] += temp * transposedB[(j + 7) * A_cols_num + k];
+                temp = loacl_A[i * A_cols_num + k];
+                local_C[i * B_cols_num + j] += temp * transposed_B[j * A_cols_num + k];
+                local_C[i * B_cols_num + j + 1] += temp * transposed_B[(j + 1) * A_cols_num + k];
+                local_C[i * B_cols_num + j + 2] += temp * transposed_B[(j + 2) * A_cols_num + k];
+                local_C[i * B_cols_num + j + 3] += temp * transposed_B[(j + 3) * A_cols_num + k];
+                local_C[i * B_cols_num + j + 4] += temp * transposed_B[(j + 4) * A_cols_num + k];
+                local_C[i * B_cols_num + j + 5] += temp * transposed_B[(j + 5) * A_cols_num + k];
+                local_C[i * B_cols_num + j + 6] += temp * transposed_B[(j + 6) * A_cols_num + k];
+                local_C[i * B_cols_num + j + 7] += temp * transposed_B[(j + 7) * A_cols_num + k];
             }
         }
     }
 
-    MPI_Gather(partialC, alloc_C_elems_num, MPI_DOUBLE, C, alloc_C_elems_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gather(local_C, local_C_elems_num, MPI_DOUBLE, C, local_C_elems_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     /*各プロセスの処理内容終わり*/
 
     //rootに戻って出力
-    if (rank == 0) {
+    if (myid == 0) {
 
         end2 = MPI_Wtime();
 
@@ -138,14 +138,14 @@ int main(int argc, char *argv[]) {
         end = MPI_Wtime();
         free(C);
 
-        printf("N:%d, all_time:%f,calc_time:%f,processes:%d(alloc_c_num:%d).threads:%d\n", A_rows_num * B_cols_num, (end - start), (end2 - start2), num_procs, alloc_C_elems_num, omp_get_max_threads());
+        printf("N:%d, all_time:%f,calc_time:%f,processes:%d(alloc_c_num:%d).threads:%d\n", A_rows_num * B_cols_num, (end - start), (end2 - start2), num_procs, local_C_elems_num, omp_get_max_threads());
     }
 
     //終了処理
     printf("finalize");
-    free(partialA);
-    free(transposedB);
-    free(partialC);
+    free(loacl_A);
+    free(transposed_B);
+    free(local_C);
     MPI_Finalize();
 
     return 0;
