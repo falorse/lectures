@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <mpi/mpi.h>
 #include <omp.h>
 #include "matrix.h"
@@ -9,152 +10,161 @@
 #define OUT 0
 //#define NO_MAT_FILE
 
-double* mulutipy_mat(const double* leftMat, const double* rightMat);
-void broadcast_mat_size(int* A_rows_num,int* B_cols_num,int* A_cols_num,int* alloc_C_elems_num,int* alloc_A_rows_num,int* alloc_A_elems_num, MPI_Comm comm);
-void broadcast_mat(double* partialA, double* partialC, double* transposedB, MPI_Comm comm);
+void get_file_paths(char* A_path, char* B_path, char* C_path, char** argv);
+bool is_input_matrixes_invalid(struct Matrix* A, struct Matrix* B);
+void create_global_matrixes(struct Matrix* A, char* A_path, struct Matrix* B,
+        char* B_path, struct Matrix* transeposed_B, struct Matrix* C, int myid);
+void create_local_matrixes(struct Matrix* local_A, struct Matrix* local_C,
+        int a_rows, int a_cols, int b_cols, int myid, int procs_num);
+void communicate_by_mpi(struct Matrix* A, struct Matrix* local_A,
+        struct Matrix* B, struct Matrix* transeposed_B);
+void calculate(const struct Matrix* local_A,
+        const struct Matrix* transeposed_B, struct Matrix* local_C);
+struct Matrix* read_input_file(char* file_path, int myid);
 
 int main(int argc, char *argv[]) {
 
-    // 引数チェックとファイルパスの取得
-    char A_path[MAXLEN];
-    char B_path[MAXLEN];
-    char C_path[MAXLEN];
-    if (argc == 4) {
-        strcpy(A_path, argv[1]);
-        strcpy(B_path, argv[2]);
-        strcpy(C_path, argv[3]);
-    } else {
+    // check argc and get file paths
+    if (argc != 4) {
         printf("ERROR USAGE: mul_matrix leftMat_path rightMat_path ansMat_path\n");
         return 0;
     }
+    char A_path[MAXLEN], B_path[MAXLEN], C_path[MAXLEN];
+    get_file_paths(A_path, B_path, C_path, argv);
 
-    int i, j, k;
-
-    // matrix sizes ,Aの行&Cの行、Bの列&Cの列、Aの列&Bの行
-    int A_rows_num, B_cols_num, A_cols_num;
-
-    struct Matrix *A, *B, *local_A;
-    struct Matrix *transposed_B, *C, *local_C;
-
-    double start, start2, end, end2;
-
-    /* MPI Initialize */
-    int myid, num_procs, local_A_elems_num, local_A_rows_num, local_C_elems_num;
+    // MPI Initialize
+    int myid, procs_num;
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+    MPI_Comm_size(MPI_COMM_WORLD, &procs_num);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
+    double start, end;
     start = MPI_Wtime();
 
-    /*rootプロセスの処理内容*/
+    // create matrixes
+    // create A, B, C without bufs in myid != 0
+    struct Matrix *A, *B, *C, *transeposed_B, *local_A, *local_C;
+    A = read_input_file(A_path, myid);
+    B = read_input_file(B_path, myid);
+
+    if(is_input_matrixes_invalid(A, B))
+        return 0;
+
     if (myid == 0) {
-        A = read_mat_file(A_path);
-        A_rows_num = A->rows;
-        A_cols_num = A->cols;
-        B = read_mat_file(B_path);
-        B_cols_num = B->cols;
-        C = create_mat(A_rows_num, B_cols_num);
-        
-        transposed_B = transpose_mat(B);
-        if (A == NULL || B == NULL) {
-            printf("ERROR filepath is wrong");
-        }
-        free(B);
-
-        local_C_elems_num = A_rows_num * B_cols_num / num_procs;
-        local_A_elems_num = A_rows_num * A_cols_num / num_procs;
-        local_A_rows_num = A_rows_num / num_procs;
-    }
-    
-    broadcast_mat_size(&A_rows_num, &B_cols_num, &A_cols_num, &local_C_elems_num, 
-            &local_A_rows_num, &local_A_elems_num, MPI_COMM_WORLD);
-
-    local_A = create_mat(local_A_rows_num, A_cols_num);
-    local_C = create_mat(local_A_rows_num, A_cols_num);
-    
-    if (myid == 0) {
-
-        double set_value;
-
-        //データを送信
-        for (i = 1; i < num_procs; i++) {
-            int a_first = i * local_A_elems_num;
-            for (k = 0; k < local_A_elems_num; k++) {
-                set_value = get_mat_value_by_index(A, a_first + k);
-                set_mat_value_by_index(local_A, set_value, k);
-            }
-            MPI_Send(local_A->bufs, local_A_elems_num, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
-        }
-
-        for (i = 0; i < local_A_elems_num; i++) {
-            set_value = get_mat_value_by_index(local_A, i);
-            set_mat_value_by_index(local_A, set_value, i);
-        }
-        
-
-        free(A);
+        C = create_mat(A->rows, B->cols);
+        transeposed_B = transepose_mat(B);
     } else {
-        MPI_Status status;
-        MPI_Recv(local_A->bufs, local_A_elems_num, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
-        transposed_B = create_mat(B_cols_num, A_cols_num);
+        C = create_mat_without_bufs(A->rows, B->cols);
+        transeposed_B = create_mat(B->cols, B->rows);
     }
-    
-    MPI_Bcast(transposed_B->bufs, transposed_B->rows * transposed_B->cols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    /*各プロセスの処理内容*/
-    double temp;
-    start2 = MPI_Wtime();
+    local_A = create_mat(A->rows / procs_num, A->cols);
+    local_C = create_mat(A->rows / procs_num, B->cols);
 
-    // 計算部分 tempをレジスタに置くこととアンローリングで高速化
-#pragma omp parallel for private(i,k,temp)
-    for (j = 0; j < B_cols_num; j += 8) {
-        for (i = 0; i < local_A_rows_num; i++) {
-            for (k = 0; k < A_cols_num; k++) {
-                temp = get_mat_value(local_A, i, k);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j, k), i, j);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j + 1, k), i, j + 1);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j + 2, k), i, j + 2);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j + 3, k), i, j + 3);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j + 4, k), i, j + 4);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j + 5, k), i, j + 5);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j + 6, k), i, j + 6);
-                set_mat_value(local_C, temp * get_mat_value(transposed_B, j + 7, k), i, j + 7);            }
-        }
-    }
-    
-    MPI_Gather(local_C->bufs, local_C_elems_num, MPI_DOUBLE, get_mat_bufs(C), local_C_elems_num, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    /*各プロセスの処理内容終わり*/
+    // communicate by MPI
+    MPI_Scatter(A->bufs, get_mat_size(local_A), MPI_DOUBLE, local_A->bufs,
+            get_mat_size(local_A), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(transeposed_B->bufs, get_mat_size(transeposed_B),
+            MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    destroy_mat(A);
+    destroy_mat(B);
 
-    printf("calc end\n");
-    //rootに戻って出力
+    calculate(local_A, transeposed_B, local_C);
+
+    MPI_Gather(local_C->bufs, get_mat_size(local_C), MPI_DOUBLE,
+            C->bufs, get_mat_size(local_C), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // write ans to file and output run time
     if (myid == 0) {
-
-        end2 = MPI_Wtime();
-
-        show_mat(C);
         write_mat_file(C_path, C);
         end = MPI_Wtime();
-        free(C);
-
-        printf("N:%d, all_time:%f,calc_time:%f,processes:%d(alloc_c_num:%d).threads:%d\n", A_rows_num * B_cols_num, (end - start), (end2 - start2), num_procs, local_C_elems_num, omp_get_max_threads());
+        printf("N:%d, time:%f, processes:%d, threads:%d\n",
+                get_mat_size(C), (end - start), procs_num, omp_get_max_threads());
     }
 
-    //終了処理
-    printf("finalize");
-    free(local_A);
-    free(transposed_B);
-    free(local_C);
+    // finalize
+    destroy_mat(C);
+    destroy_mat(local_A);
+    destroy_mat(transeposed_B);
+    destroy_mat(local_C);
     MPI_Finalize();
-
     return 0;
 }
 
+void get_file_paths(char* A_path, char* B_path, char* C_path, char** argv) {
+    strcpy(A_path, argv[1]);
+    strcpy(B_path, argv[2]);
+    strcpy(C_path, argv[3]);
+};
 
-void broadcast_mat_size(int* A_rows_num,int* B_cols_num,int* A_cols_num,int* alloc_C_elems_num,int* alloc_A_rows_num,int* alloc_A_elems_num, MPI_Comm comm){
-    MPI_Bcast(A_rows_num, 1, MPI_INT, 0, comm);
-    MPI_Bcast(B_cols_num, 1, MPI_INT, 0, comm);
-    MPI_Bcast(A_cols_num, 1, MPI_INT, 0, comm);
-    MPI_Bcast(alloc_C_elems_num, 1, MPI_INT, 0, comm);
-    MPI_Bcast(alloc_A_rows_num, 1, MPI_INT, 0, comm);
-    MPI_Bcast(alloc_A_elems_num, 1, MPI_INT, 0, comm);    
-}
+bool is_input_matrixes_invalid(struct Matrix* A, struct Matrix* B){
+  if(A == NULL || B == NULL || A->cols != B->rows) {
+      return true;
+  }
+  return false;
+};
+
+struct Matrix* read_input_file(char* file_path, int myid) {
+    int i, j, rows, cols;
+
+    FILE* fp = fopen(file_path, "rb");
+    if (fp == NULL) {
+        return NULL;
+    } else {
+        fread(&rows, sizeof (int), 1, fp);
+        fread(&cols, sizeof (int), 1, fp);
+    }
+
+    struct Matrix* mat = malloc(sizeof (struct Matrix));
+
+    if (myid == 0) {
+        mat = create_mat(rows, cols);
+        for (i = 0; i < rows; ++i) {
+            for (j = 0; j < cols; ++j) {
+                double value;
+                fread(&value, sizeof (double), 1, fp);
+                set_value(mat, value, i, j);
+            }
+        }
+    } else {
+        mat = create_mat_without_bufs(rows, cols);
+    }
+    fclose(fp);
+
+    return mat;
+};
+
+void communicate_by_mpi(struct Matrix* A, struct Matrix* local_A,
+        struct Matrix* B, struct Matrix* transeposed_B) {
+    MPI_Scatter(A->bufs, get_mat_size(local_A), MPI_DOUBLE, local_A->bufs,
+            get_mat_size(local_A), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    destroy_mat(A);
+
+    MPI_Bcast(transeposed_B->bufs, get_mat_size(transeposed_B),
+            MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    destroy_mat(B);
+};
+
+void calculate(const struct Matrix* local_A,
+        const struct Matrix* transeposed_B, struct Matrix* local_C) {
+    int i, j, k;
+    double tmp;
+
+    // turning by loop unwinging and putting tmp on register
+#pragma omp parallel for private(i,k,tmp)
+    for (j = 0; j < transeposed_B->rows; j += 8) {
+        for (i = 0; i < local_A->rows; i++) {
+            for (k = 0; k < local_A->cols; k++) {
+                tmp = get_value(local_A, i, k);
+                add_value(local_C, tmp * get_value(transeposed_B, j, k), i, j);
+                add_value(local_C, tmp * get_value(transeposed_B, j + 1, k), i, j + 1);
+                add_value(local_C, tmp * get_value(transeposed_B, j + 2, k), i, j + 2);
+                add_value(local_C, tmp * get_value(transeposed_B, j + 3, k), i, j + 3);
+                add_value(local_C, tmp * get_value(transeposed_B, j + 4, k), i, j + 4);
+                add_value(local_C, tmp * get_value(transeposed_B, j + 5, k), i, j + 5);
+                add_value(local_C, tmp * get_value(transeposed_B, j + 6, k), i, j + 6);
+                add_value(local_C, tmp * get_value(transeposed_B, j + 7, k), i, j + 7);
+            }
+        }
+    }
+};
