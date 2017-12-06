@@ -4,8 +4,7 @@
     <df root="." name="0">
       <in>matrix.c</in>
       <in>mpi_test.c</in>
-      <in>mul_matrix_from_file.c</in>
-      <in>multiply_matrix.cpp</in>
+      <in>multiply_matrix.c</in>
     </df>
     <logicalFolder name="ExternalFiles"
                    displayName="重要なファイル"
@@ -56,6 +55,16 @@
         <cTool flags="0">
         </cTool>
       </item>
+      <item path="matrix.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="matrix_1.c" ex="false" tool="0" flavor2="2">
+        <cTool flags="0">
+        </cTool>
+      </item>
+      <item path="matrix_2.c" ex="false" tool="0" flavor2="2">
+        <cTool flags="0">
+        </cTool>
+      </item>
       <item path="mpi_test.c" ex="false" tool="0" flavor2="2">
         <cTool>
           <incDir>
@@ -64,13 +73,11 @@
           </incDir>
         </cTool>
       </item>
-      <item path="mul_matrix_from_file.c" ex="false" tool="0" flavor2="2">
+      <item path="multiply_matrix.c" ex="false" tool="0" flavor2="2">
         <cTool flags="0">
         </cTool>
       </item>
-      <item path="multiply_matrix.cpp" ex="false" tool="1" flavor2="4">
-        <ccTool flags="0">
-        </ccTool>
+      <item path="multiply_matrix.cpp" ex="false" tool="1" flavor2="0">
       </item>
     </conf>
   </confs>

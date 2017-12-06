@@ -8,8 +8,7 @@
       <in>matrix.c</in>
       <in>matrix.h</in>
       <in>mpi_test.c</in>
-      <in>mul_matrix_from_file.c</in>
-      <in>multiply_matrix.cpp</in>
+      <in>multiply_matrix.c</in>
     </df>
   </logicalFolder>
   <projectmakefile>Makefile</projectmakefile>
