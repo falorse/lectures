@@ -42,11 +42,10 @@ int main(int argc, char *argv[]) {
     start = MPI_Wtime();
 
     // make matrixes
-    // in id != 0, create A, B, C without bufs
+    // create A, B, C without bufs in myid != 0
     A = read_input_file(A_path, myid);
     B = read_input_file(B_path, myid);
-    local_A = create_mat(A->rows / procs_num, A->cols);
-    local_C = create_mat(A->rows / procs_num, B->cols);
+
     if (myid == 0) {
         C = create_mat(A->rows, B->cols);
         transeposed_B = transepose_mat(B);
@@ -54,27 +53,23 @@ int main(int argc, char *argv[]) {
         C = create_mat_without_bufs(A->rows, B->cols);
         transeposed_B = create_mat(B->cols, B->rows);
     }
-
-    destroy_mat(B);
-
-    printf("A: %d, B: %d, t_B: %d, C: %d, l_A: %d, l_C: %d id: %d\n",
-            get_mat_size(A), get_mat_size(B), get_mat_size(transeposed_B),
-            get_mat_size(C), get_mat_size(local_A), get_mat_size(local_C), myid);
-
-    broadcast_local_A(A, local_A, myid, procs_num);
-
+    
+    local_A = create_mat(A->rows / procs_num, A->cols);
+    local_C = create_mat(A->rows / procs_num, B->cols);
+    
+    // communicate by MPI
+    MPI_Scatter(A->bufs, get_mat_size(local_A), MPI_DOUBLE, local_A->bufs,
+            get_mat_size(local_A), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    destroy_mat(A);
+    
     MPI_Bcast(transeposed_B->bufs, get_mat_size(transeposed_B),
             MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    destroy_mat(B);
 
-    printf("A: %f, B: %f, t_B: %f, C: %f, l_A: %f, l_C: %f id: %d\n",
-            A->bufs[1], B->bufs[1], transeposed_B->bufs[1],
-            C->bufs[1], local_A->bufs[1], local_C->bufs[1], myid);
-
-    printf("calc start\n");
-    /*各プロセスの処理内容*/
     double temp;
     start2 = MPI_Wtime();
 
+    
     // 計算部分 tempをレジスタに置くこととアンローリングで高速化
 #pragma omp parallel for private(i,k,temp)
     for (j = 0; j < transeposed_B->rows; j += 8) {
@@ -113,24 +108,22 @@ int main(int argc, char *argv[]) {
         end = MPI_Wtime();
 
         printf("N:%d, all_time:%f,calc_time:%f,processes:%d(alloc_c_num:%d).threads:%d\n", get_mat_size(C), (end - start), (end2 - start2), procs_num, get_mat_size(local_C), omp_get_max_threads());
-        free(C);
     }
 
     //終了処理
-    printf("finalize");
-    free(local_A);
-    free(transeposed_B);
-    free(local_C);
+    destroy_mat(C);
+//    free(local_A);
+    destroy_mat(local_A);
+    destroy_mat(transeposed_B);
+    destroy_mat(local_C);
     MPI_Finalize();
-
     return 0;
 }
 
 struct Matrix* read_input_file(char* file_path, int myid) {
-    FILE* fp;
     int i, j, rows, cols;
 
-    fp = fopen(file_path, "rb");
+    FILE* fp = fopen(file_path, "rb");
     if (fp == NULL) {
         return NULL;
     } else {
@@ -138,8 +131,7 @@ struct Matrix* read_input_file(char* file_path, int myid) {
         fread(&cols, sizeof (int), 1, fp);
     }
 
-    struct Matrix* mat = NULL;
-    mat = malloc(sizeof (struct Matrix));
+    struct Matrix* mat = malloc(sizeof (struct Matrix));
 
     if (myid == 0) {
         mat = create_mat(rows, cols);
@@ -164,6 +156,7 @@ void broadcast_local_A(struct Matrix* A, struct Matrix* local_A, int myid, int p
         for (i = 1; i < procs_num; i++) {
             int local_A_size = get_mat_size(local_A);
             int local_A_first_index = i * local_A_size;
+            
             local_A->bufs = &(A->bufs[local_A_first_index]);
             MPI_Send(local_A->bufs, local_A_size, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
         }
