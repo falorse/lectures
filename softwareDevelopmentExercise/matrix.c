@@ -5,19 +5,25 @@ struct Matrix* create_mat(int rows, int cols) {
     struct Matrix* mat = NULL;
 
     mat = malloc(sizeof (struct Matrix));
-    if (mat == NULL) {
-        return NULL;
-    }
 
     mat->rows = rows;
     mat->cols = cols;
-    mat->bufs = NULL;
 
     double* buf = (double*) malloc(sizeof (double) * rows * cols);
-    if (buf == NULL) {
-        destroy_mat(mat);
-        return NULL;
-    }
+    mat->bufs = buf;
+
+    return mat;
+};
+
+struct Matrix* create_mat_without_bufs(int rows, int cols){
+    struct Matrix* mat = NULL;
+    
+    mat = malloc(sizeof (struct Matrix));
+    
+    mat->rows = rows;
+    mat->cols = cols;
+    double* buf = (double*) malloc(sizeof (double) * 0);
+    
     mat->bufs = buf;
 
     return mat;
@@ -41,12 +47,21 @@ double get_mat_value_by_index(const struct Matrix* mat, int index){
     return mat->bufs[index];
 }
 
+void add_mat_value(struct Matrix* mat, double value, int row, int col){
+    double pre_value = get_mat_value(mat, row, col);
+    set_mat_value(mat, pre_value + value, row, col);
+}
+
 double* get_mat_bufs(const struct Matrix* mat){
     if(mat == NULL)
         return NULL;
     else
         return mat->bufs;
 }
+
+int get_mat_size(const struct Matrix* mat){
+    return mat->rows * mat->cols;
+};
 
 void destroy_mat(struct Matrix* mat) {
     if (mat != NULL) {
@@ -65,14 +80,14 @@ void show_mat(struct Matrix* mat) {
     printf("--------------------\n");
     for (i = 0; i < mat->rows; i++) {
         for (j = 0; j < mat->cols; j++) {
-            printf("%f ", mat->bufs[i * mat->cols + j]);
+            printf("%f ", get_mat_value(mat, i, j));
         }
         printf("\n");
     }
     printf("--------------------\n");
 };
 
-struct Matrix* transpose_mat(const struct Matrix* original_mat) {
+struct Matrix* transepose_mat(const struct Matrix* original_mat) {
 
     struct Matrix* transposed_mat = create_mat(original_mat->cols, original_mat->rows);
     int i, j;
@@ -111,9 +126,7 @@ struct Matrix* read_mat_file(const char* file_path) {
         fread(&cols, sizeof (int), 1, fp);
         
         mat = create_mat(rows, cols);
-        mat->rows = rows;
-        mat->cols = cols;
-
+        
         for (i = 0; i < rows; ++i) {
             for (j = 0; j < cols; ++j) {
                 fread(&value, sizeof (double), 1, fp);
