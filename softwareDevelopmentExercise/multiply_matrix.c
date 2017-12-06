@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <mpi/mpi.h>
 #include <omp.h>
 #include "matrix.h"
@@ -13,15 +14,12 @@ double* mulutipy_mat(const double* leftMat, const double* rightMat);
 void broadcast_mat_sizes(int* A_rows, int* B_cols, int* A_cols_num,
         int* local_C_size, int* local_A_rows, int* local_A_size, MPI_Comm comm);
 void broadcast_mat(double* partialA, double* partialC, double* transposedB, MPI_Comm comm);
-void read_input_file(char* file_path, struct Matrix* mat, int* mat_rows, int* mat_cols);
-struct Matrix* read_input_file2(char* file_path, int myid);
+struct Matrix* read_input_file(char* file_path, int myid);
 
 int main(int argc, char *argv[]) {
 
     // 引数チェックとファイルパスの取得
-    char A_path[MAXLEN];
-    char B_path[MAXLEN];
-    char C_path[MAXLEN];
+    char A_path[MAXLEN], B_path[MAXLEN], C_path[MAXLEN];
     if (argc == 4) {
         strcpy(A_path, argv[1]);
         strcpy(B_path, argv[2]);
@@ -32,11 +30,7 @@ int main(int argc, char *argv[]) {
     }
 
     int i, j, k;
-
-    // matrix sizes ,Aの行&Cの行、Bの列&Cの列、Aの列&Bの行
-
     struct Matrix *A, *B, *local_A, *local_C, *transeposed_B, *C;
-
     double start, start2, end, end2;
 
     /* MPI Initialize */
@@ -46,29 +40,22 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     start = MPI_Wtime();
-    printf("read mat files\n");
 
-    /*rootプロセスの処理内容*/
+    // make matrixes
+    // in id != 0, create A, B, C without bufs
+    A = read_input_file(A_path, myid);
+    B = read_input_file(B_path, myid);
+    local_A = create_mat(A->rows / procs_num, A->cols);
+    local_C = create_mat(A->rows / procs_num, B->cols);
     if (myid == 0) {
-
-        A = read_mat_file(A_path);
-        B = read_mat_file(B_path);
         C = create_mat(A->rows, B->cols);
         transeposed_B = transepose_mat(B);
-
-        //        show_mat(A);
-        //        show_mat(B);
-        //        show_mat(transeposed_B);
-        //        show_mat(C);
-        destroy_mat(B);
     } else {
-        A = read_input_file2(A_path, myid);
-        B = read_input_file2(B_path, myid);
         C = create_mat_without_bufs(A->rows, B->cols);
         transeposed_B = create_mat(B->cols, B->rows);
     }
-    local_A = create_mat(A->rows / procs_num, A->cols);
-    local_C = create_mat(A->rows / procs_num, B->cols);
+
+    destroy_mat(B);
 
     printf("A: %d, B: %d, t_B: %d, C: %d, l_A: %d, l_C: %d id: %d\n",
             get_mat_size(A), get_mat_size(B), get_mat_size(transeposed_B),
@@ -94,11 +81,11 @@ int main(int argc, char *argv[]) {
             set_mat_value_by_index(local_A, value, i);
         }
 
-        destroy_mat(A);
     } else {
         MPI_Recv(local_A->bufs, get_mat_size(local_A), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, 0);
         //        transeposed_B = create_mat(B->cols, B->rows);
     }
+    destroy_mat(A);
 
     MPI_Bcast(transeposed_B->bufs, get_mat_size(transeposed_B),
             MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -129,7 +116,7 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    
+
     printf("A: %f, B: %f, t_B: %f, C: %f, l_A: %f, l_C: %f id: %d\n",
             A->bufs[1], B->bufs[1], transeposed_B->bufs[1],
             C->bufs[1], local_A->bufs[1], local_C->bufs[1], myid);
@@ -137,7 +124,7 @@ int main(int argc, char *argv[]) {
 
     MPI_Gather(local_C->bufs, get_mat_size(local_C), MPI_DOUBLE, get_mat_bufs(C), get_mat_size(local_C), MPI_DOUBLE, 0, MPI_COMM_WORLD);
     /*各プロセスの処理内容終わり*/
-//    printf("%f,%f,%f,%f\n", local_C->bufs[1], local_C->bufs[3], local_C->bufs[4], local_C->bufs[10]);
+    //    printf("%f,%f,%f,%f\n", local_C->bufs[1], local_C->bufs[3], local_C->bufs[4], local_C->bufs[10]);
 
     printf("calc end\n");
     //rootに戻って出力
@@ -163,28 +150,32 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void read_input_file(char* file_path, struct Matrix* mat, int* mat_rows, int* mat_cols) {
-    mat = read_mat_file(file_path);
-    mat_rows = mat->rows;
-    mat_cols = mat->cols;
-    printf("%d\n", mat_cols);
-}
-
-struct Matrix* read_input_file2(char* file_path, int myid) {
+struct Matrix* read_input_file(char* file_path, int myid) {
     FILE* fp;
-    int rows, cols;
+    int i, j, rows, cols;
+
+    fp = fopen(file_path, "rb");
+    if (fp == NULL) {
+        return NULL;
+    } else {
+        fread(&rows, sizeof (int), 1, fp);
+        fread(&cols, sizeof (int), 1, fp);
+    }
 
     struct Matrix* mat = NULL;
     mat = malloc(sizeof (struct Matrix));
 
-    fp = fopen(file_path, "rb");
-    if (fp != NULL) {
-        fread(&rows, sizeof (int), 1, fp);
-        fread(&cols, sizeof (int), 1, fp);
-
-        mat = create_mat_without_bufs(rows, cols);
+    if (myid == 0) {
+        mat = create_mat(rows, cols);
+        for (i = 0; i < rows; ++i) {
+            for (j = 0; j < cols; ++j) {
+                double value;
+                fread(&value, sizeof (double), 1, fp);
+                set_mat_value(mat, value, i, j);
+            }
+        }
     } else {
-        return NULL;
+        mat = create_mat_without_bufs(rows, cols);
     }
     fclose(fp);
 
