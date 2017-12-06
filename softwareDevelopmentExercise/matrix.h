@@ -13,15 +13,15 @@ struct Matrix* create_mat_without_bufs(int rows, int cols);
 
 void destroy_mat(struct Matrix* mat);
 
-void set_mat_value(struct Matrix*, double value, int row, int col);
+void set_value(struct Matrix*, double value, int row, int col);
 
-void set_mat_value_by_index(struct Matrix*, double value, int index);
+void set_value_by_index(struct Matrix*, double value, int index);
 
-double get_mat_value(const struct Matrix* mat, int row, int col);
+double get_value(const struct Matrix* mat, int row, int col);
 
-double get_mat_value_by_index(const struct Matrix* mat, int index);
+double get_value_by_index(const struct Matrix* mat, int index);
 
-void add_mat_value(struct Matrix* mat, double value, int row, int col);
+void add_value(struct Matrix* mat, double value, int row, int col);
 
 double* get_mat_bufs(const struct Matrix* mat);
 
