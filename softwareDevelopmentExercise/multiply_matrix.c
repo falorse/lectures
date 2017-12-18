@@ -42,17 +42,10 @@ int main(int argc, char *argv[]) {
     start = MPI_Wtime();
 
     // create matrixes
-    struct Matrix *A, *B, *C, *transeposed_B, *local_A, *local_C;
-
     // create A, B, C without bufs in myid != 0
+    struct Matrix *A, *B, *C, *transeposed_B, *local_A, *local_C;
     A = read_input_file(A_path, myid);
     B = read_input_file(B_path, myid);
-
-    if(is_input_matrixes_invalid(A, B)){
-        printf("ERROR: an input matrix file is invalid\n");
-        return 0;
-    }
-    
     if (myid == 0) {
         C = create_mat(A->rows, B->cols);
         transeposed_B = transepose_mat(B);
@@ -60,10 +53,13 @@ int main(int argc, char *argv[]) {
         C = create_mat_without_bufs(A->rows, B->cols);
         transeposed_B = create_mat(B->cols, B->rows);
     }
-
     local_A = create_mat(A->rows / procs_num, A->cols);
     local_C = create_mat(A->rows / procs_num, B->cols);
 
+    if(is_input_matrixes_invalid(A, B)){
+        printf("ERROR: an input matrix file is invalid\n");
+        return 0;
+    }
 
     communicate_by_mpi(A, local_A, B, transeposed_B);
 
