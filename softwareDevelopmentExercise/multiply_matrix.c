@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
 
     // check argc and get file paths
     if (argc != 4) {
-        printf("ERROR USAGE: mul_matrix leftMat_path rightMat_path ansMat_path\n");
+        printf("ERROR USAGE: ./mul_matrix left_mat_path right_mat_path ans_mat_path\n");
         return 0;
     }
     char A_path[MAXLEN], B_path[MAXLEN], C_path[MAXLEN];
@@ -42,14 +42,17 @@ int main(int argc, char *argv[]) {
     start = MPI_Wtime();
 
     // create matrixes
-    // create A, B, C without bufs in myid != 0
     struct Matrix *A, *B, *C, *transeposed_B, *local_A, *local_C;
+
+    // create A, B, C without bufs in myid != 0
     A = read_input_file(A_path, myid);
     B = read_input_file(B_path, myid);
 
-    if(is_input_matrixes_invalid(A, B))
+    if(is_input_matrixes_invalid(A, B)){
+        printf("ERROR: an input matrix file is invalid\n");
         return 0;
-
+    }
+    
     if (myid == 0) {
         C = create_mat(A->rows, B->cols);
         transeposed_B = transepose_mat(B);
@@ -61,20 +64,15 @@ int main(int argc, char *argv[]) {
     local_A = create_mat(A->rows / procs_num, A->cols);
     local_C = create_mat(A->rows / procs_num, B->cols);
 
-    // communicate by MPI
-    MPI_Scatter(A->bufs, get_mat_size(local_A), MPI_DOUBLE, local_A->bufs,
-            get_mat_size(local_A), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Bcast(transeposed_B->bufs, get_mat_size(transeposed_B),
-            MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    destroy_mat(A);
-    destroy_mat(B);
+
+    communicate_by_mpi(A, local_A, B, transeposed_B);
 
     calculate(local_A, transeposed_B, local_C);
 
     MPI_Gather(local_C->bufs, get_mat_size(local_C), MPI_DOUBLE,
             C->bufs, get_mat_size(local_C), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    // write ans to file and output run time
+    // write ans matrix to file and output run time
     if (myid == 0) {
         write_mat_file(C_path, C);
         end = MPI_Wtime();
@@ -144,6 +142,19 @@ void communicate_by_mpi(struct Matrix* A, struct Matrix* local_A,
             MPI_DOUBLE, 0, MPI_COMM_WORLD);
     destroy_mat(B);
 };
+
+void create_global_matrixes(struct Matrix* A, char* A_path, struct Matrix* B,
+        char* B_path, struct Matrix* transeposed_B, struct Matrix* C, int myid){
+    A = read_input_file(A_path, myid);
+    B = read_input_file(B_path, myid);
+    if (myid == 0) {
+        C = create_mat(A->rows, B->cols);
+        transeposed_B = transepose_mat(B);
+    } else {
+        C = create_mat_without_bufs(A->rows, B->cols);
+        transeposed_B = create_mat(B->cols, B->rows);
+    }
+}
 
 void calculate(const struct Matrix* local_A,
         const struct Matrix* transeposed_B, struct Matrix* local_C) {

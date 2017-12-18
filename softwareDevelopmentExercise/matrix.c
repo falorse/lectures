@@ -17,13 +17,13 @@ struct Matrix* create_mat(int rows, int cols) {
 
 struct Matrix* create_mat_without_bufs(int rows, int cols){
     struct Matrix* mat = NULL;
-    
+
     mat = malloc(sizeof (struct Matrix));
-    
+
     mat->rows = rows;
     mat->cols = cols;
     double* buf = (double*) malloc(sizeof (double) * 0);
-    
+
     mat->bufs = buf;
 
     return mat;
@@ -108,7 +108,7 @@ struct Matrix* read_mat_file(const char* file_path) {
     double value;
     struct Matrix* mat = NULL;
     int i, j;
-    
+
 #ifdef NO_MAT_FILE
     int mat_rows = 2;
     matrix = (double *) malloc(mat_rows * mat_rows * sizeof (double));
@@ -124,9 +124,9 @@ struct Matrix* read_mat_file(const char* file_path) {
     if (fp != NULL) {
         fread(&rows, sizeof (int), 1, fp);
         fread(&cols, sizeof (int), 1, fp);
-        
+
         mat = create_mat(rows, cols);
-        
+
         for (i = 0; i < rows; ++i) {
             for (j = 0; j < cols; ++j) {
                 fread(&value, sizeof (double), 1, fp);

@@ -36,4 +36,3 @@ struct Matrix* read_mat_file(const char* file_path);
 void write_mat_file(const char* file_path, struct Matrix* mat);
 
 #endif /* MATRIX_H */
-
