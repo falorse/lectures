@@ -61,6 +61,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    // scatter A to local_A and broadcast transeposed_B
     communicate_by_mpi(A, local_A, B, transeposed_B);
 
     calculate(local_A, transeposed_B, local_C);
